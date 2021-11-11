@@ -1,0 +1,239 @@
+---
+title: 2. Quantile Baseline
+output: rmarkdown::html_document
+---
+
+This vignette describes the quantile baseline forecaster. The symmetrized
+variation on this model is the `COVIDhub-baseline` model in the COVID-19
+Forecast Hub.
+
+We'll use these packages in this vignette:
+
+```{r, message = FALSE}
+library(covidcast)
+library(epitools)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(simplets)
+theme_set(theme_bw())
+```
+
+## Example data
+
+We'll work with the following data with daily incident case counts of COVID-19 in Florida and New Jersey:
+
+```{r fig.width=7, fig.height=7}
+x <- covidcast_signal(data_source = "jhu-csse",
+                      signal = "confirmed_incidence_num",
+                      start_day = "2020-06-01",
+                      end_day = "2021-05-31",
+                      geo_type = "state",
+                      geo_values = "fl",
+                      as_of = "2021-10-28") %>%
+  select(geo_value, time_value, cases = value) %>%
+  as.epi_tibble()
+
+head(x)
+ggplot() +
+  geom_line(data = x, mapping = aes(x = time_value, y = cases)) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(vars(geo_value), scales = "free_y", ncol = 1)
+```
+
+Although the data presented here are *daily* data, we will illustrate a workflow
+for generating one through four *week* ahead forecasts of weekly incident cases
+in these locations using the quantile baseline model in combination with some
+outlier correction and detection functionality from the `epitools` package.
+
+# Outlier detection and correction
+
+First, we do some cleanup, outlier detection and correction.  We iterate the
+detection and correction procedure twice because nearby outliers are sometimes
+hard to detect (the method thinks it is seeing a trend or high-variance period,
+rather than nearby outliers).
+
+```{r}
+# drop trailing zeros
+tail(x)
+x <- x[seq_len(nrow(x) - 3), ]
+
+
+detection_methods = bind_rows(
+  tibble(
+    method = c("rolling_median"),
+    method_args = list(list(detect_negatives = TRUE,
+                            detection_multiplier = 2.5)),
+    method_abbr = c("median")
+  ),
+  tibble(
+    method = c("stl"),
+    method_args = list(list(detect_negatives = TRUE,
+                            detection_multiplier = 2.5)),
+    method_abbr = c("stl_seasonal")
+  ),
+  tibble(
+    method = c("stl"),
+    method_args = list(list(detect_negatives = TRUE,
+                            detection_multiplier = 2.5,
+                            include_seasonality = FALSE)),
+    method_abbr = c("stl_nonseasonal")
+  )
+)
+
+x = x %>%
+  # group_by(geo_value) to do outlier detection/correction separately for each
+  # geo_value
+  dplyr::group_by(geo_value) %>%
+  detect_outliers(
+    var = cases,
+    methods = detection_methods,
+    combine_method = "median",
+    new_col_name = "outlier_info") %>%
+  correct_outliers(
+    var = cases,
+    outliers_col = "outlier_info",
+    detection_method = "combined",
+    new_col_name = "corrected_cases1") %>%
+  detect_outliers(
+    var = corrected_cases1,
+    methods = detection_methods,
+    combine_method = "median",
+    new_col_name = "outlier_info") %>%
+  correct_outliers(
+    var = corrected_cases1,
+    outliers_col = "outlier_info",
+    detection_method = "combined",
+    new_col_name = "corrected_cases2")
+
+head(x)
+```
+
+In the plot below, black is the original data, blue is after one round of
+outlier detection and correction, and orange is after two rounds; we'll use the
+data in orange as model inputs.
+
+```{r}
+ggplot(data = x) +
+  geom_line(mapping = aes(x = time_value, y = cases)) +
+  geom_line(mapping = aes(x = time_value, y = corrected_cases1), color = "cornflowerblue") +
+  geom_line(mapping = aes(x = time_value, y = corrected_cases2), color = "orange") +
+  theme_bw()
+```
+
+
+# Fitting baseline models
+
+Here we fit a few variations on models:
+
+```{r}
+get_intervals_df <- function(predictions) {
+  purrr::map_dfr(
+    1:28,
+    function(h) {
+      purrr::map_dfr(
+        c(0.025, 0.25),
+        function(tau) {
+          data.frame(
+            h = h,
+            level = as.character(100 * (1 - 2 * tau)),
+            lower = quantile(predictions[, h], probs = tau),
+            upper = quantile(predictions[, h], probs = 1 - tau)
+          )
+        }) %>%
+        dplyr::mutate(level = factor(level, levels = c("95", "50")))
+    })
+}
+
+get_baseline_predictions <- function(response_var,
+                                     transformation,
+                                     symmetrize,
+                                     window_size) {
+  # fit
+  baseline_fit <- fit_simple_ts(
+    y = x[[response_var]],
+    ts_frequency = 1,
+    model = 'quantile_baseline',
+    transformation = transformation,
+    transform_offset = ifelse(transformation == "none", 0, 1),
+    d = 0,
+    D = 0,
+    symmetrize = symmetrize,
+    window_size = window_size)
+
+  # predict
+  predictions <- predict(baseline_fit, nsim = 100000, horizon = 28)
+
+  # truncate to non-negative
+  predictions <- pmax(predictions, 0)
+
+  # extract predictive intervals and medians for plotting
+  intervals_df <- get_intervals_df(predictions) %>%
+    dplyr::mutate(t = nrow(x) + h)
+  medians_df <- data.frame(
+    t = nrow(x) + seq_len(ncol(predictions)),
+    yhat = apply(predictions, 2, median)
+  )
+
+  return(tibble(
+    intervals_df = list(intervals_df),
+    medians_df = list(medians_df)
+  ))
+}
+
+variations_to_fit <- tidyr::expand_grid(
+  response_var = "corrected_cases2",
+  transformation = c("none", "sqrt"),
+  symmetrize = c(TRUE, FALSE),
+  window_size = c(nrow(x) - 1, 28)
+)
+
+predictions <- purrr::pmap_dfr(variations_to_fit, get_baseline_predictions)
+```
+
+```{r}
+intervals_df <- dplyr::bind_cols(variations_to_fit, predictions) %>%
+  dplyr::select(-medians_df) %>%
+  dplyr::mutate(model = paste("baseline",
+                              "transform", transformation,
+                              ifelse(symmetrize, "symmetrized", "non_symmetrized"),
+                              "window_size", window_size,
+                              sep = "_")) %>%
+  tidyr::unnest(intervals_df)
+
+medians_df <- dplyr::bind_cols(variations_to_fit, predictions) %>%
+  dplyr::select(-intervals_df) %>%
+  dplyr::mutate(model = paste("baseline",
+                              "transform", transformation,
+                              ifelse(symmetrize, "symmetrized", "non_symmetrized"),
+                              "window_size", window_size,
+                              sep = "_")) %>%
+  tidyr::unnest(medians_df)
+```
+
+```{r, fig.width=10, fig.height=12}
+observed_df <- dplyr::bind_rows(
+  data.frame(
+    t = seq_len(nrow(x)),
+    y = x$cases,
+    obs_type = "observed"
+  ),
+  data.frame(
+    t = seq_len(nrow(x)),
+    y = x$corrected_cases2,
+    obs_type = "corrected"
+  )
+) %>%
+  dplyr::mutate(obs_type = factor(obs_type, levels = c("observed", "corrected")))
+
+p <- ggplot() +
+  geom_line(mapping = aes(x = t, y = y, color = obs_type), data = observed_df) +
+  geom_ribbon(mapping = aes(x = t, ymin = lower, ymax = upper, fill = level), data = intervals_df) +
+  geom_line(mapping = aes(x = t, y = yhat), data = medians_df, color = "blue") +
+  scale_color_manual(values = c("observed" = "orange", "corrected" = "black")) +
+  scale_fill_viridis_d() +
+  facet_wrap(vars(model), scales = "free_y", ncol = 2) +
+  theme_bw()
+
+print(p)
+```

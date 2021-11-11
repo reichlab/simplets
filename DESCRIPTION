@@ -1,0 +1,16 @@
+Package: simplets
+Title: Simple models for time series forecasting
+Version: 0.0.0.1000
+Authors@R:
+    person(given = "Evan",
+           family = "Ray",
+           role = c("aut", "cre"),
+           email = "elray@umass.edu")
+Description: Simple models for time series forecasting
+License: MIT
+Imports:
+  dplyr, tibble, tidyr, MMWRweek, lubridate, purrr, ggplot2, magrittr
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.2
