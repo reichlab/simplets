@@ -30,6 +30,11 @@ predict.simple_ts <- function(
   ...
 ) {
   if(is.null(seed)) {
+    # if random seed has not been initialized, generate a random number to
+    # force it to exist.
+    if (!exists(".Random.seed")) {
+      temp <- rnorm(1)
+    }
     seed <- .Random.seed
   } else {
     set.seed(seed)
