@@ -109,11 +109,12 @@ predict.quantile_baseline <- function(
   if (origin == "obs") {
     pred_origin <- tail(newdata, 1)
   } else {
-    stl_formula <- y ~ trend(window = 7) + season(period = 1, window = 1)
+    stl_formula <- y ~ trend(window = 7) +
+      season(period = 1, window = 1)
 
     pred_origin <- data.frame(
         y = newdata,
-        time = Sys.Date() - seq_along(newdata)) %>%
+        time = Sys.Date() - rev(seq_along(newdata))) %>%
       as_tsibble(index = time) %>%
       model(STL(stl_formula, robust = TRUE)) %>%
       generics::components() %>%
