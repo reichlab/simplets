@@ -25,7 +25,7 @@ of class "ts".  See the help for stats::ts for more.}
 'spline_smoother'}
 
 \item{transformation}{character specifying transformation type:
-"box-cox", "log", or "none".  See details for more.}
+"box-cox", "sqrt", "log", or "none".  See details for more.}
 
 \item{transform_offset}{numeric offset used before the Box-Cox and log
 transformations; the offset is added to all observations before

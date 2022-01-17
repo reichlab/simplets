@@ -21,7 +21,7 @@ theme_set(theme_bw())
 
 ## Example data
 
-We'll work with the following data with daily incident case counts of COVID-19 in Florida and New Jersey:
+We'll work with the following data with daily incident case counts of COVID-19 in Florida:
 
 ```{r fig.width=7, fig.height=7}
 x <- covidcast_signal(data_source = "jhu-csse",
@@ -56,7 +56,7 @@ rather than nearby outliers).
 ```{r}
 # drop trailing zeros
 tail(x)
-x <- x[seq_len(nrow(x) - 3), ]
+# x <- x[seq_len(nrow(x) - 3), ]
 
 
 detection_methods = bind_rows(
@@ -162,7 +162,7 @@ get_baseline_predictions <- function(response_var,
     window_size = window_size)
 
   # predict
-  predictions <- predict(baseline_fit, nsim = 100000, horizon = 28)
+  predictions <- predict(baseline_fit, nsim = 100000, horizon = 28, origin = "obs")
 
   # truncate to non-negative
   predictions <- pmax(predictions, 0)

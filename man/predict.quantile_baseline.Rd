@@ -4,7 +4,14 @@
 \alias{predict.quantile_baseline}
 \title{Predict future disease incidence by resampling one-step-ahead forecasts}
 \usage{
-\method{predict}{quantile_baseline}(quantile_baseline, newdata, quantiles, horizon, nsim)
+\method{predict}{quantile_baseline}(
+  quantile_baseline,
+  newdata,
+  quantiles,
+  horizon,
+  nsim,
+  origin = c("obs", "loess")
+)
 }
 \arguments{
 \item{quantile_baseline}{a quantile_baseline fit object}
@@ -17,6 +24,10 @@
 
 \item{nsim}{number of samples to use for generating predictions at
 horizons greater than 1}
+
+\item{origin}{string specifying whether to project forward from the
+most recent observation (\code{"obs"}) or from the fitted value from a LOESS
+smooth (\code{"loess"})}
 
 \item{cum_data}{numeric vector of length at least one with cumulative counts}
 }

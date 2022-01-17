@@ -81,8 +81,15 @@ fit_quantile_baseline <- function(
 #' @param horizon number of time steps forward to predict
 #' @param nsim number of samples to use for generating predictions at
 #' horizons greater than 1
+#' @param origin string specifying whether to project forward from the
+#' most recent observation (`"obs"`) or from the fitted value from a LOESS
+#' smooth (`"loess"`)
 #'
 #' @return matrix of samples of incidence
+#'
+#' @importFrom tsibble as_tsibble
+#' @importFrom fabletools model
+#' @importFrom feasts STL
 #'
 #' @export
 predict.quantile_baseline <- function(
@@ -90,13 +97,30 @@ predict.quantile_baseline <- function(
   newdata,
   quantiles,
   horizon,
-  nsim
+  nsim,
+  origin = c("obs", "loess")
   ) {
+  origin <- match.arg(origin)
+  
   symmetrize <- attr(quantile_baseline, "symmetrize")
 
   results <- matrix(NA, nrow = nsim, ncol = horizon)
   
-  last_inc <- tail(newdata, 1)
+  if (origin == "obs") {
+    pred_origin <- tail(newdata, 1)
+  } else {
+    stl_formula <- y ~ trend(window = 7) + season(period = 1, window = 1)
+
+    pred_origin <- data.frame(
+        y = newdata,
+        time = Sys.Date() - seq_along(newdata)) %>%
+      as_tsibble(index = time) %>%
+      model(STL(stl_formula, robust = TRUE)) %>%
+      generics::components() %>%
+      as_tibble() %>%
+      pull(trend) %>%
+      tail(1)
+  }
   
   # Case for horizon 1 is different because sampling is not necessary; we can
   # extract exact quantiles
@@ -107,18 +131,19 @@ predict.quantile_baseline <- function(
   sampled_inc_diffs <- quantile(
     quantile_baseline,
     probs = seq(from = 0, to = 1.0, length = nsim))
-  sampled_inc_raw <- last_inc + sampled_inc_diffs
+  sampled_inc_raw <- pred_origin + sampled_inc_diffs
   
   ## save as a column in results
   results[, 1] <- sampled_inc_raw
   
-  for(h in (1 + seq_len(horizon - 1))) {
+  for (h in (1 + seq_len(horizon - 1))) {
     sampled_inc_diffs <- sample(sampled_inc_diffs, size = nsim, replace = FALSE)
     sampled_inc_raw <- sampled_inc_raw + sampled_inc_diffs
     
     # force median difference = 0
     if (symmetrize) {
-      sampled_inc_corrected <- sampled_inc_raw - (median(sampled_inc_raw) - last_inc)
+      sampled_inc_corrected <- sampled_inc_raw -
+        (median(sampled_inc_raw) - pred_origin)
     } else {
       sampled_inc_corrected <- sampled_inc_raw
     }
