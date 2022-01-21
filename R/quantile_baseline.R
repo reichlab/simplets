@@ -82,8 +82,12 @@ fit_quantile_baseline <- function(
 #' @param nsim number of samples to use for generating predictions at
 #' horizons greater than 1
 #' @param origin string specifying whether to project forward from the
-#' most recent observation (`"obs"`) or from the fitted value from a LOESS
-#' smooth (`"loess"`)
+#' most recent observation (`"obs"`), from the fitted value from a LOESS
+#' smooth (`"loess"`) based on a window of size `n_origin``, or from the
+#' median of the last `n_origin` observed values (`"median"`)
+#' @param n_origin number of data points used in a window for a LOESS fit or
+#' for calculating the median. Defaults to 7, which seems reasonable for daily
+#' data.
 #'
 #' @return matrix of samples of incidence
 #'
@@ -98,7 +102,8 @@ predict.quantile_baseline <- function(
   quantiles,
   horizon,
   nsim,
-  origin = c("obs", "loess")
+  origin = c("obs", "loess", "median"),
+  n_origin = 7
   ) {
   origin <- match.arg(origin)
   
@@ -108,8 +113,8 @@ predict.quantile_baseline <- function(
   
   if (origin == "obs") {
     pred_origin <- tail(newdata, 1)
-  } else {
-    stl_formula <- y ~ trend(window = 7) +
+  } else if (origin == "loess") {
+    stl_formula <- y ~ trend(window = n_origin, degree = 1, jump = 1) +
       season(period = 1, window = 1)
 
     pred_origin <- data.frame(
@@ -121,6 +126,8 @@ predict.quantile_baseline <- function(
       as_tibble() %>%
       pull(trend) %>%
       tail(1)
+  } else if (origin == "median") {
+    pred_origin <- median(tail(newdata, n_origin))
   }
   
   # Case for horizon 1 is different because sampling is not necessary; we can
