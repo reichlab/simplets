@@ -11,7 +11,8 @@
   horizon,
   nsim,
   origin = c("obs", "loess", "median"),
-  n_origin = 7
+  n_origin = 7,
+  force_nonneg = FALSE
 )
 }
 \arguments{
@@ -33,6 +34,8 @@ smooth (\code{"loess"}) based on a window of size \verb{n_origin``, or from the 
 \item{n_origin}{number of data points used in a window for a LOESS fit or
 for calculating the median. Defaults to 7, which seems reasonable for daily
 data.}
+
+\item{force_nonneg}{boolean; if TRUE, results are forced to be non-negative}
 
 \item{cum_data}{numeric vector of length at least one with cumulative counts}
 }

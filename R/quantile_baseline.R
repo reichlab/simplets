@@ -88,6 +88,7 @@ fit_quantile_baseline <- function(
 #' @param n_origin number of data points used in a window for a LOESS fit or
 #' for calculating the median. Defaults to 7, which seems reasonable for daily
 #' data.
+#' @param force_nonneg boolean; if TRUE, results are forced to be non-negative
 #'
 #' @return matrix of samples of incidence
 #'
@@ -103,7 +104,8 @@ predict.quantile_baseline <- function(
   horizon,
   nsim,
   origin = c("obs", "loess", "median"),
-  n_origin = 7
+  n_origin = 7,
+  force_nonneg = FALSE
   ) {
   origin <- match.arg(origin)
   
@@ -143,6 +145,11 @@ predict.quantile_baseline <- function(
   
   ## save as a column in results
   results[, 1] <- sampled_inc_raw
+
+  # force results to be non-negative if requested
+  if (force_nonneg) {
+    results[, 1] <- pmax(0, results[, 1])
+  }
   
   for (h in (1 + seq_len(horizon - 1))) {
     sampled_inc_diffs <- sample(sampled_inc_diffs, size = nsim, replace = FALSE)
@@ -156,6 +163,11 @@ predict.quantile_baseline <- function(
       sampled_inc_corrected <- sampled_inc_raw
     }
     
+    # force results to be non-negative if requested
+    if (force_nonneg) {
+      sampled_inc_corrected <- pmax(0, sampled_inc_corrected)
+    }
+
     ## save as a column in results
     results[, h] <- sampled_inc_corrected
   }
