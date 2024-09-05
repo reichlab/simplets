@@ -9,7 +9,17 @@ Authors@R:
 Description: Simple models for time series forecasting
 License: MIT
 Imports:
-  dplyr, tibble, tidyr, MMWRweek, lubridate, purrr, ggplot2, magrittr
+  car,
+  dplyr,
+  fabletools,
+  feasts,
+  ggplot2,
+  lubridate,
+  magrittr,
+  MMWRweek,
+  purrr,
+  tibble,
+  tidyr
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
